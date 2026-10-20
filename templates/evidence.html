@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Evidence Lab — ForenSight{% endblock %}
+{% block page_title %}Digital Evidence Lab{% endblock %}
+{% block page_subtitle %}Secure evidence registry, cryptographic integrity verification, and case associations{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+  <div class="card-panel-header">
+    <div class="filter-bar" style="margin-bottom: 0;">
+      <input type="text" id="evidenceSearch" class="search-input" placeholder="Search by file name or type..." onkeyup="filterEvidence()">
+
+      <select id="statusFilter" class="filter-select" onchange="filterEvidence()">
+        <option value="">All Statuses</option>
+        <option value="Registered">Registered</option>
+        <option value="Under Review">Under Review</option>
+        <option value="Verified">Verified</option>
+        <option value="Archived">Archived</option>
+      </select>
+    </div>
+
+    <button class="btn btn-primary" onclick="openModal('uploadEvidenceModal')">
+      <span>📤</span> Upload New Evidence
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="data-table" id="evidenceTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Evidence Name</th>
+          <th>Category</th>
+          <th>File Size</th>
+          <th>SHA-256 Hash</th>
+          <th>Status</th>
+          <th>Linked Cases</th>
+          <th>Uploader</th>
+          <th>Collected At</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in evidence_list %}
+        <tr data-name="{{ e.evidence_name|lower }}" data-type="{{ e.evidence_type|lower }}" data-status="{{ e.status }}">
+          <td>#{{ e.evidence_id }}</td>
+          <td style="font-weight: 600; color: var(--text-main);">
+            {{ e.evidence_name }}
+          </td>
+          <td>{{ e.evidence_type }}</td>
+          <td>{{ (e.file_size / 1024)|round(1) }} KB</td>
+          <td>
+            <span class="hash-code" title="{{ e.sha256_hash }}" onclick="copyToClipboard('{{ e.sha256_hash }}', 'SHA-256')">
+              {{ e.sha256_hash[:18] }}...
+            </span>
+          </td>
+          <td>
+            <span class="badge" style="background: rgba(56,189,248,0.1); color: var(--accent-cyan);">
+              {{ e.status }}
+            </span>
+          </td>
+          <td>
+            {% if e.associated_cases %}
+              {% for ac in e.associated_cases.split(',') %}
+                <span class="badge" style="background: #1e293b; color: var(--text-muted); margin: 2px;">
+                  {{ ac }}
+                </span>
+              {% endfor %}
+            {% else %}
+              <span style="color: var(--text-dim); font-size: 0.75rem;">None</span>
+            {% endif %}
+          </td>
+          <td>{{ e.uploaded_by_name }}</td>
+          <td>{{ e.collected_at.strftime('%Y-%m-%d %H:%M') if e.collected_at else 'N/A' }}</td>
+          <td style="text-align: right; white-space: nowrap;">
+            <a href="/custody?evidence_id={{ e.evidence_id }}" class="btn btn-outline btn-sm">Chain</a>
+            <a href="/notes?evidence_id={{ e.evidence_id }}" class="btn btn-outline btn-sm">Notes</a>
+            <button class="btn btn-danger btn-sm" onclick="confirmDeleteEvidence({{ e.evidence_id }}, '{{ e.evidence_name|escape }}')">Delete</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal: Upload Evidence File -->
+<div class="modal-overlay" id="uploadEvidenceModal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <div class="modal-title">Upload Digital Evidence</div>
+      <button class="modal-close" onclick="closeModal('uploadEvidenceModal')">&times;</button>
+    </div>
+    <form id="uploadEvidenceForm" onsubmit="submitUploadEvidence(event)" enctype="multipart/form-data">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Select Evidence File *</label>
+          <input type="file" name="file" class="form-control" required style="padding: 8px;">
+          <small style="color: var(--text-dim); font-size: 0.75rem;">
+            Accepted formats: .eml, .log, .csv, .exe, .pdf, .pcap, .bin, .txt, .zip, etc. (Max 32MB)
+          </small>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Evidence Category *</label>
+            <select name="evidence_type" class="form-control" required>
+              <option value="Email">Email</option>
+              <option value="Log File">Log File</option>
+              <option value="Executable">Executable / Binary</option>
+              <option value="Memory Dump">Memory Dump</option>
+              <option value="Disk Image">Disk Image</option>
+              <option value="Network Capture">Network Capture</option>
+              <option value="Document">Document</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Evidence Status</label>
+            <select name="status" class="form-control">
+              <option value="Registered">Registered</option>
+              <option value="Under Review">Under Review</option>
+              <option value="Verified">Verified</option>
+              <option value="Archived">Archived</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Collection Timestamp</label>
+            <input type="datetime-local" name="collected_at" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Uploader (Forensic Analyst) *</label>
+            <select name="uploaded_by" class="form-control" required>
+              {% for u in users %}
+              <option value="{{ u.user_id }}">{{ u.name }} ({{ u.role }})</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Associate with Cases (Many-to-Many CaseEvidence)</label>
+          <div class="checkbox-list">
+            {% for c in cases %}
+            <label class="checkbox-item">
+              <input type="checkbox" name="case_ids" value="{{ c.case_id }}">
+              <span>#{{ c.case_id }} - <strong>{{ c.title }}</strong> ({{ c.incident_type }})</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('uploadEvidenceModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="uploadBtn">Compute SHA-256 & Upload</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterEvidence() {
+  const query = document.getElementById('evidenceSearch').value.toLowerCase();
+  const status = document.getElementById('statusFilter').value;
+  const rows = document.querySelectorAll('#evidenceTable tbody tr');
+
+  rows.forEach(r => {
+    const name = r.getAttribute('data-name') || '';
+    const type = r.getAttribute('data-type') || '';
+    const rStatus = r.getAttribute('data-status') || '';
+
+    const matchesQuery = name.includes(query) || type.includes(query);
+    const matchesStatus = !status || rStatus === status;
+
+    r.style.display = (matchesQuery && matchesStatus) ? '' : 'none';
+  });
+}
+
+function submitUploadEvidence(e) {
+  e.preventDefault();
+  const form = e.target;
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true;
+  btn.innerText = 'Calculating Hash & Ingesting...';
+
+  const formData = new FormData(form);
+
+  fetch('/api/evidence', {
+    method: 'POST',
+    body: formData
+  })
+  .then(res => res.json())
+  .then(res => {
+    btn.disabled = false;
+    btn.innerText = 'Compute SHA-256 & Upload';
+    if (res.status === 'success') {
+      showToast(`Evidence uploaded! SHA-256: ${res.data.sha256_hash.substring(0, 16)}...`, 'success');
+      setTimeout(() => location.reload(), 900);
+    } else {
+      showToast(res.message || 'Upload error', 'error');
+    }
+  })
+  .catch(() => {
+    btn.disabled = false;
+    btn.innerText = 'Compute SHA-256 & Upload';
+    showToast('Network error during upload', 'error');
+  });
+}
+
+function confirmDeleteEvidence(id, name) {
+  if (confirm(`Are you sure you want to delete evidence #${id} ("${name}")?\n\nThis will remove case associations, findings, notes, and custody records linked to this evidence.`)) {
+    fetch(`/api/evidence/${id}`, { method: 'DELETE' })
+      .then(res => res.json())
+      .then(res => {
+        if (res.status === 'success') {
+          showToast('Evidence deleted', 'success');
+          setTimeout(() => location.reload(), 800);
+        } else {
+          showToast(res.message || 'Delete error', 'error');
+        }
+      })
+      .catch(() => showToast('Network error', 'error'));
+  }
+}
+</script>
+{% endblock %}

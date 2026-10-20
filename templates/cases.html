@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}Cases — ForenSight{% endblock %}
+{% block page_title %}Investigation Cases{% endblock %}
+{% block page_subtitle %}Manage cybersecurity incidents and forensic case files{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+  <div class="card-panel-header">
+    <div class="filter-bar" style="margin-bottom: 0;">
+      <input type="text" id="caseSearch" class="search-input" placeholder="Search cases by title or incident..." onkeyup="filterCases()">
+      
+      <select id="priorityFilter" class="filter-select" onchange="filterCases()">
+        <option value="">All Priorities</option>
+        <option value="Critical">Critical</option>
+        <option value="High">High</option>
+        <option value="Medium">Medium</option>
+        <option value="Low">Low</option>
+      </select>
+
+      <select id="statusFilter" class="filter-select" onchange="filterCases()">
+        <option value="">All Statuses</option>
+        <option value="Open">Open</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Closed">Closed</option>
+      </select>
+    </div>
+
+    <button class="btn btn-primary" onclick="openModal('createCaseModal')">
+      <span>➕</span> New Investigation Case
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="data-table" id="casesTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Case Title</th>
+          <th>Incident Type</th>
+          <th>Priority</th>
+          <th>Status</th>
+          <th>Created By</th>
+          <th>Evidence</th>
+          <th>Created Date</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in cases %}
+        <tr data-title="{{ c.title|lower }}" data-type="{{ c.incident_type|lower }}" data-priority="{{ c.priority }}" data-status="{{ c.status }}">
+          <td>#{{ c.case_id }}</td>
+          <td style="font-weight: 600;">
+            <a href="/cases/{{ c.case_id }}" style="color: var(--accent-cyan); text-decoration: none;">
+              {{ c.title }}
+            </a>
+          </td>
+          <td>{{ c.incident_type }}</td>
+          <td>
+            <span class="badge badge-{{ c.priority|lower }}">{{ c.priority }}</span>
+          </td>
+          <td>
+            <span class="badge badge-{{ c.status|lower|replace(' ', '') }}">{{ c.status }}</span>
+          </td>
+          <td>
+            <span class="badge" style="background: rgba(56,189,248,0.1); color: var(--accent-cyan);">
+              {{ c.evidence_count }} items
+            </span>
+          </td>
+          <td>{{ c.created_by_name }}</td>
+          <td>{{ c.created_at.strftime('%Y-%m-%d') if c.created_at else '' }}</td>
+          <td style="text-align: right; white-space: nowrap;">
+            <a href="/cases/{{ c.case_id }}" class="btn btn-outline btn-sm">View</a>
+            <button class="btn btn-outline btn-sm" onclick="editCase({{ c.case_id }}, '{{ c.title|escape }}', '{{ c.incident_type|escape }}', `{{ c.description|escape }}`, '{{ c.priority }}', '{{ c.status }}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="confirmDeleteCase({{ c.case_id }}, '{{ c.title|escape }}')">Delete</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal: Create Case -->
+<div class="modal-overlay" id="createCaseModal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <div class="modal-title">Create Investigation Case</div>
+      <button class="modal-close" onclick="closeModal('createCaseModal')">&times;</button>
+    </div>
+    <form id="createCaseForm" onsubmit="submitCreateCase(event)">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Case Title *</label>
+          <input type="text" name="title" class="form-control" required placeholder="e.g. Ransomware Outbreak Incident">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Incident Type *</label>
+          <input type="text" name="incident_type" class="form-control" required placeholder="e.g. Malware, Phishing, Data Breach">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-control" placeholder="Case scope and preliminary assessment..."></textarea>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select name="priority" class="form-control">
+              <option value="Low">Low</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Lead Investigator</label>
+            <select name="created_by" class="form-control" required>
+              {% for u in users %}
+              <option value="{{ u.user_id }}">{{ u.name }} ({{ u.role }})</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('createCaseModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Case</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Edit Case -->
+<div class="modal-overlay" id="editCaseModal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <div class="modal-title">Edit Case Details</div>
+      <button class="modal-close" onclick="closeModal('editCaseModal')">&times;</button>
+    </div>
+    <form id="editCaseForm" onsubmit="submitEditCase(event)">
+      <input type="hidden" id="edit_case_id" name="case_id">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Case Title *</label>
+          <input type="text" id="edit_title" name="title" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Incident Type *</label>
+          <input type="text" id="edit_incident_type" name="incident_type" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea id="edit_description" name="description" class="form-control"></textarea>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select id="edit_priority" name="priority" class="form-control">
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select id="edit_status" name="status" class="form-control">
+              <option value="Open">Open</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('editCaseModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterCases() {
+  const query = document.getElementById('caseSearch').value.toLowerCase();
+  const priority = document.getElementById('priorityFilter').value;
+  const status = document.getElementById('statusFilter').value;
+  const rows = document.querySelectorAll('#casesTable tbody tr');
+
+  rows.forEach(r => {
+    const title = r.getAttribute('data-title') || '';
+    const type = r.getAttribute('data-type') || '';
+    const rPriority = r.getAttribute('data-priority') || '';
+    const rStatus = r.getAttribute('data-status') || '';
+
+    const matchesQuery = title.includes(query) || type.includes(query);
+    const matchesPriority = !priority || rPriority === priority;
+    const matchesStatus = !status || rStatus === status;
+
+    r.style.display = (matchesQuery && matchesPriority && matchesStatus) ? '' : 'none';
+  });
+}
+
+function submitCreateCase(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = {
+    title: form.title.value,
+    incident_type: form.incident_type.value,
+    description: form.description.value,
+    priority: form.priority.value,
+    created_by: parseInt(form.created_by.value)
+  };
+
+  fetch('/api/cases', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(res => {
+    if (res.status === 'success') {
+      showToast('Case created successfully!', 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(res.message || 'Failed to create case', 'error');
+    }
+  })
+  .catch(() => showToast('Network error', 'error'));
+}
+
+function editCase(id, title, type, desc, priority, status) {
+  document.getElementById('edit_case_id').value = id;
+  document.getElementById('edit_title').value = title;
+  document.getElementById('edit_incident_type').value = type;
+  document.getElementById('edit_description').value = desc;
+  document.getElementById('edit_priority').value = priority;
+  document.getElementById('edit_status').value = status;
+  openModal('editCaseModal');
+}
+
+function submitEditCase(e) {
+  e.preventDefault();
+  const form = e.target;
+  const caseId = form.case_id.value;
+  const data = {
+    title: form.title.value,
+    incident_type: form.incident_type.value,
+    description: form.description.value,
+    priority: form.priority.value,
+    status: form.status.value
+  };
+
+  fetch(`/api/cases/${caseId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(res => {
+    if (res.status === 'success') {
+      showToast('Case updated successfully!', 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(res.message || 'Failed to update case', 'error');
+    }
+  })
+  .catch(() => showToast('Network error', 'error'));
+}
+
+function confirmDeleteCase(id, title) {
+  if (confirm(`Are you sure you want to delete case #${id}: "${title}"?\n\nThis will safely dissociate any linked evidence and delete related tasks.`)) {
+    fetch(`/api/cases/${id}`, { method: 'DELETE' })
+      .then(res => res.json())
+      .then(res => {
+        if (res.status === 'success') {
+          showToast('Case deleted successfully', 'success');
+          setTimeout(() => location.reload(), 800);
+        } else {
+          showToast(res.message || 'Could not delete case', 'error');
+        }
+      })
+      .catch(() => showToast('Network error', 'error'));
+  }
+}
+</script>
+{% endblock %}

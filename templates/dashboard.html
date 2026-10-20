@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — ForenSight{% endblock %}
+{% block page_title %}Security Operations Dashboard{% endblock %}
+{% block page_subtitle %}Live metrics and relational database telemetry{% endblock %}
+
+{% block content %}
+<!-- Metric Cards Grid -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-header">
+      <span class="metric-title">Total Cases</span>
+      <span class="metric-icon">📁</span>
+    </div>
+    <div class="metric-value">{{ stats.total_cases }}</div>
+    <div class="metric-subtitle">{{ stats.open_cases }} active investigations</div>
+  </div>
+
+  <div class="metric-card success">
+    <div class="metric-header">
+      <span class="metric-title">Evidence Files</span>
+      <span class="metric-icon">🔬</span>
+    </div>
+    <div class="metric-value">{{ stats.total_evidence }}</div>
+    <div class="metric-subtitle">{{ stats.total_size_kb }} KB verified storage</div>
+  </div>
+
+  <div class="metric-card warning">
+    <div class="metric-header">
+      <span class="metric-title">Active Tasks</span>
+      <span class="metric-icon">📋</span>
+    </div>
+    <div class="metric-value">{{ stats.pending_tasks }}</div>
+    <div class="metric-subtitle">Assigned investigator tasks</div>
+  </div>
+
+  <div class="metric-card critical">
+    <div class="metric-header">
+      <span class="metric-title">High/Critical Findings</span>
+      <span class="metric-icon">⚠️</span>
+    </div>
+    <div class="metric-value">{{ stats.critical_findings }}</div>
+    <div class="metric-subtitle">Urgent threat indicators</div>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+  <!-- Left Column: Active Cases -->
+  <div class="card-panel">
+    <div class="card-panel-header">
+      <div class="card-panel-title">
+        <span>📁</span> Recent Investigation Cases
+      </div>
+      <a href="/cases" class="btn btn-outline btn-sm">View All Cases</a>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Case Title</th>
+            <th>Type</th>
+            <th>Priority</th>
+            <th>Status</th>
+            <th>Evidence</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in recent_cases %}
+          <tr>
+            <td>#{{ c.case_id }}</td>
+            <td style="font-weight: 600;">
+              <a href="/cases/{{ c.case_id }}" style="color: var(--accent-cyan); text-decoration: none;">
+                {{ c.title }}
+              </a>
+            </td>
+            <td>{{ c.incident_type }}</td>
+            <td>
+              <span class="badge badge-{{ c.priority|lower }}">{{ c.priority }}</span>
+            </td>
+            <td>
+              <span class="badge badge-{{ c.status|lower|replace(' ', '') }}">{{ c.status }}</span>
+            </td>
+            <td>{{ c.evidence_count }} items</td>
+            <td>
+              <a href="/cases/{{ c.case_id }}" class="btn btn-outline btn-sm">Details</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Right Column: Critical Findings & Recent Activity -->
+  <div>
+    <!-- High Severity Findings Card -->
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <div class="card-panel-title">
+          <span>⚠️</span> Critical Threat Findings
+        </div>
+        <a href="/findings" class="btn btn-outline btn-sm">View All</a>
+      </div>
+      <div class="card-panel-body" style="padding: 12px 16px;">
+        {% if critical_findings_list %}
+          {% for f in critical_findings_list %}
+          <div style="padding: 10px 0; border-bottom: 1px solid var(--border-color);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <span style="font-weight: 600; font-size: 0.88rem;">{{ f.finding_type }}</span>
+              <span class="badge badge-{{ f.severity|lower }}">{{ f.severity }}</span>
+            </div>
+            <div style="font-size: 0.82rem; color: var(--text-muted);">{{ f.description }}</div>
+            <div style="font-size: 0.75rem; color: var(--accent-cyan); margin-top: 4px;">
+              Evidence: {{ f.evidence_name }}
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p style="color: var(--text-dim); font-size: 0.85rem; padding: 8px 0;">No critical findings recorded.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Recent Audit Activity -->
+    <div class="card-panel">
+      <div class="card-panel-header">
+        <div class="card-panel-title">
+          <span>📜</span> System Audit Stream
+        </div>
+        <a href="/audit" class="btn btn-outline btn-sm">Audit Trail</a>
+      </div>
+      <div class="card-panel-body" style="padding: 12px 16px;">
+        {% for a in recent_audits %}
+        <div style="padding: 8px 0; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-size: 0.82rem;">
+          <div style="display: flex; justify-content: space-between;">
+            <strong style="color: var(--accent-cyan);">{{ a.action }}</strong>
+            <span style="color: var(--text-dim); font-size: 0.75rem;">{{ a.created_at.strftime('%H:%M:%S') if a.created_at else '' }}</span>
+          </div>
+          <div style="color: var(--text-muted); margin-top: 2px;">{{ a.details }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

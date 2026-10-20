@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Investigation Tasks — ForenSight{% endblock %}
+{% block page_title %}Investigation Tasks{% endblock %}
+{% block page_subtitle %}Task allocation, assignment workflows, and investigator tracking{% endblock %}
+
+{% block content %}
+<div class="card-panel">
+  <div class="card-panel-header">
+    <div class="filter-bar" style="margin-bottom: 0;">
+      <input type="text" id="taskSearch" class="search-input" placeholder="Search tasks by title..." onkeyup="filterTasks()">
+
+      <select id="caseFilter" class="filter-select" onchange="filterTasks()">
+        <option value="">All Cases</option>
+        {% for c in cases %}
+        <option value="{{ c.case_id }}">Case #{{ c.case_id }}: {{ c.title }}</option>
+        {% endfor %}
+      </select>
+
+      <select id="statusFilter" class="filter-select" onchange="filterTasks()">
+        <option value="">All Statuses</option>
+        <option value="Pending">Pending</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Completed">Completed</option>
+      </select>
+    </div>
+
+    <button class="btn btn-primary" onclick="openModal('createTaskModal')">
+      <span>➕</span> Create New Task
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="data-table" id="tasksTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Task Title</th>
+          <th>Case</th>
+          <th>Assigned Investigators</th>
+          <th>Due Date</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th style="text-align: right;">Update Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tasks %}
+        <tr data-title="{{ t.task_title|lower }}" data-case="{{ t.case_id }}" data-status="{{ t.status }}">
+          <td>#{{ t.task_id }}</td>
+          <td style="font-weight: 600;">
+            <div>{{ t.task_title }}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); font-weight: normal;">{{ t.description }}</div>
+          </td>
+          <td>
+            <a href="/cases/{{ t.case_id }}" style="color: var(--accent-cyan); text-decoration: none;">
+              #{{ t.case_id }} - {{ t.case_title }}
+            </a>
+          </td>
+          <td>
+            {% if t.assigned_users %}
+              {% for u in t.assigned_users.split(', ') %}
+                <span class="badge" style="background: rgba(56,189,248,0.1); color: var(--accent-cyan); margin: 2px;">
+                  👤 {{ u }}
+                </span>
+              {% endfor %}
+            {% else %}
+              <span style="color: var(--text-dim); font-size: 0.8rem;">Unassigned</span>
+            {% endif %}
+          </td>
+          <td>{{ t.due_date.strftime('%Y-%m-%d') if t.due_date else 'None' }}</td>
+          <td>
+            <span class="badge badge-{{ t.status|lower|replace(' ', '') }}">
+              {{ t.status }}
+            </span>
+          </td>
+          <td>{{ t.created_at.strftime('%Y-%m-%d') if t.created_at else '' }}</td>
+          <td style="text-align: right; white-space: nowrap;">
+            <select class="filter-select" style="padding: 4px 8px; font-size: 0.78rem;" onchange="updateTaskStatus({{ t.task_id }}, this.value)">
+              <option value="Pending" {% if t.status == 'Pending' %}selected{% endif %}>Pending</option>
+              <option value="In Progress" {% if t.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+              <option value="Completed" {% if t.status == 'Completed' %}selected{% endif %}>Completed</option>
+            </select>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal: Create Task -->
+<div class="modal-overlay" id="createTaskModal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <div class="modal-title">Create Investigation Task</div>
+      <button class="modal-close" onclick="closeModal('createTaskModal')">&times;</button>
+    </div>
+    <form id="createTaskForm" onsubmit="submitCreateTask(event)">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Associated Case *</label>
+          <select name="case_id" class="form-control" required>
+            {% for c in cases %}
+            <option value="{{ c.case_id }}">#{{ c.case_id }} — {{ c.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Task Title *</label>
+          <input type="text" name="task_title" class="form-control" required placeholder="e.g. Conduct memory extraction">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-control" placeholder="Detailed technical assignment instructions..."></textarea>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Due Date</label>
+            <input type="date" name="due_date" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Initial Status</label>
+            <select name="status" class="form-control">
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Assign Investigators (Many-to-Many TaskAssignments)</label>
+          <div class="checkbox-list">
+            {% for u in users %}
+            <label class="checkbox-item">
+              <input type="checkbox" name="user_ids" value="{{ u.user_id }}">
+              <span>{{ u.name }} ({{ u.role }})</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('createTaskModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Task</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterTasks() {
+  const query = document.getElementById('taskSearch').value.toLowerCase();
+  const caseId = document.getElementById('caseFilter').value;
+  const status = document.getElementById('statusFilter').value;
+  const rows = document.querySelectorAll('#tasksTable tbody tr');
+
+  rows.forEach(r => {
+    const title = r.getAttribute('data-title') || '';
+    const rCase = r.getAttribute('data-case') || '';
+    const rStatus = r.getAttribute('data-status') || '';
+
+    const matchesQuery = title.includes(query);
+    const matchesCase = !caseId || rCase === caseId;
+    const matchesStatus = !status || rStatus === status;
+
+    r.style.display = (matchesQuery && matchesCase && matchesStatus) ? '' : 'none';
+  });
+}
+
+function submitCreateTask(e) {
+  e.preventDefault();
+  const form = e.target;
+  const userCheckboxes = form.querySelectorAll('input[name="user_ids"]:checked');
+  const userIds = Array.from(userCheckboxes).map(cb => parseInt(cb.value));
+
+  const data = {
+    case_id: parseInt(form.case_id.value),
+    task_title: form.task_title.value,
+    description: form.description.value,
+    due_date: form.due_date.value || null,
+    status: form.status.value,
+    user_ids: userIds
+  };
+
+  fetch('/api/tasks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(res => {
+    if (res.status === 'success') {
+      showToast('Task created successfully with user assignments!', 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(res.message || 'Error creating task', 'error');
+    }
+  })
+  .catch(() => showToast('Network error', 'error'));
+}
+
+function updateTaskStatus(taskId, newStatus) {
+  fetch(`/api/tasks/${taskId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: newStatus, user_id: 1 })
+  })
+  .then(res => res.json())
+  .then(res => {
+    if (res.status === 'success') {
+      showToast(`Task #${taskId} updated via Stored Procedure!`, 'success');
+      setTimeout(() => location.reload(), 600);
+    } else {
+      showToast(res.message || 'Failed to update task', 'error');
+    }
+  })
+  .catch(() => showToast('Network error', 'error'));
+}
+</script>
+{% endblock %}

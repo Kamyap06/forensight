@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block title %}Case #{{ case.case_id }} — ForenSight{% endblock %}
+{% block page_title %}{{ case.title }}{% endblock %}
+{% block page_subtitle %}Case File #{{ case.case_id }} • Incident: {{ case.incident_type }}{% endblock %}
+
+{% block content %}
+<!-- Case Summary Header Card -->
+<div class="card-panel" style="margin-bottom: 24px;">
+  <div class="card-panel-header">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <span class="badge badge-{{ case.priority|lower }}">{{ case.priority }} Priority</span>
+      <span class="badge badge-{{ case.status|lower|replace(' ', '') }}">{{ case.status }}</span>
+      <span style="color: var(--text-dim); font-size: 0.85rem;">
+        Lead: <strong>{{ case.created_by_name }}</strong> ({{ case.created_by_email }})
+      </span>
+    </div>
+    <div>
+      <a href="/cases" class="btn btn-outline btn-sm">← Back to Cases</a>
+      <button class="btn btn-primary btn-sm" onclick="openModal('linkEvidenceModal')">➕ Link Evidence</button>
+      <button class="btn btn-primary btn-sm" onclick="openModal('addTaskModal')">➕ Add Task</button>
+    </div>
+  </div>
+  <div class="card-panel-body">
+    <div style="font-size: 0.95rem; color: var(--text-main); margin-bottom: 16px;">
+      {{ case.description or 'No detailed description provided for this incident.' }}
+    </div>
+    <div style="display: flex; gap: 24px; font-size: 0.8rem; color: var(--text-dim);">
+      <div>Created: <strong>{{ case.created_at.strftime('%Y-%m-%d %H:%M') if case.created_at else 'N/A' }}</strong></div>
+      <div>Last Updated: <strong>{{ case.updated_at.strftime('%Y-%m-%d %H:%M') if case.updated_at else 'N/A' }}</strong></div>
+    </div>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 3fr 2fr; gap: 24px;">
+  <!-- Left: Associated Evidence -->
+  <div class="card-panel">
+    <div class="card-panel-header">
+      <div class="card-panel-title">
+        <span>🔬</span> Associated Digital Evidence ({{ associated_evidence|length }})
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Evidence Name</th>
+            <th>Type</th>
+            <th>SHA-256 Hash</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if associated_evidence %}
+            {% for e in associated_evidence %}
+            <tr>
+              <td>#{{ e.evidence_id }}</td>
+              <td style="font-weight: 600;">{{ e.evidence_name }}</td>
+              <td>{{ e.evidence_type }}</td>
+              <td>
+                <span class="hash-code" title="{{ e.sha256_hash }}" onclick="copyToClipboard('{{ e.sha256_hash }}', 'SHA-256 Hash')">
+                  {{ e.sha256_hash[:16] }}...
+                </span>
+              </td>
+              <td>
+                <span class="badge" style="background: rgba(56,189,248,0.1); color: var(--accent-cyan);">
+                  {{ e.status }}
+                </span>
+              </td>
+              <td>
+                <button class="btn btn-danger btn-sm" onclick="unlinkEvidence({{ case.case_id }}, {{ e.evidence_id }})">Unlink</button>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 24px;">
+                No evidence items currently linked to this case.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Right: Case Tasks -->
+  <div class="card-panel">
+    <div class="card-panel-header">
+      <div class="card-panel-title">
+        <span>📋</span> Investigation Tasks ({{ tasks|length }})
+      </div>
+    </div>
+    <div class="card-panel-body" style="padding: 12px 16px;">
+      {% if tasks %}
+        {% for t in tasks %}
+        <div style="padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <strong style="font-size: 0.9rem;">{{ t.task_title }}</strong>
+            <span class="badge badge-{{ t.status|lower|replace(' ', '') }}">{{ t.status }}</span>
+          </div>
+          <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 6px;">{{ t.description }}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--text-dim);">
+            <div>Assignee: <span style="color: var(--accent-cyan);">{{ t.assigned_users or 'Unassigned' }}</span></div>
+            <div>Due: {{ t.due_date.strftime('%Y-%m-%d') if t.due_date else 'No due date' }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p style="color: var(--text-dim); font-size: 0.85rem; padding: 12px 0;">No tasks assigned to this case yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Link Existing Evidence -->
+<div class="modal-overlay" id="linkEvidenceModal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <div class="modal-title">Link Evidence to Case #{{ case.case_id }}</div>
+      <button class="modal-close" onclick="closeModal('linkEvidenceModal')">&times;</button>
+    </div>
+    <form id="linkEvidenceForm" onsubmit="submitLinkEvidence(event)">
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+          Select digital evidence items to associate with this case via the <code>CaseEvidence</code> junction table.
+        </p>
+        <div class="checkbox-list">
+          {% for ev in all_evidence %}
+          <label class="checkbox-item">
+            <input type="checkbox" name="evidence_ids" value="{{ ev.evidence_id }}" {% if ev.evidence_id in associated_evidence_ids %}checked disabled{% endif %}>
+            <span>#{{ ev.evidence_id }} - <strong>{{ ev.evidence_name }}</strong> ({{ ev.evidence_type }})</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('linkEvidenceModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Associations</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Add Task for this case -->
+<div class="modal-overlay" id="addTaskModal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <div class="modal-title">Add Investigation Task</div>
+      <button class="modal-close" onclick="closeModal('addTaskModal')">&times;</button>
+    </div>
+    <form id="addTaskForm" onsubmit="submitAddTask(event)">
+      <input type="hidden" name="case_id" value="{{ case.case_id }}">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Task Title *</label>
+          <input type="text" name="task_title" class="form-control" required placeholder="e.g. Reverse engineer payload">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-control" placeholder="Actionable instructions for assigned investigators..."></textarea>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Due Date</label>
+            <input type="date" name="due_date" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-control">
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Assign Investigators (Many-to-Many TaskAssignments)</label>
+          <div class="checkbox-list">
+            {% for u in users %}
+            <label class="checkbox-item">
+              <input type="checkbox" name="user_ids" value="{{ u.user_id }}">
+              <span>{{ u.name }} ({{ u.role }})</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('addTaskModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Task</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function submitLinkEvidence(e) {
+  e.preventDefault();
+  const checkboxes = document.querySelectorAll('#linkEvidenceForm input[name="evidence_ids"]:checked:not(:disabled)');
+  const evidenceIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+  if (evidenceIds.length === 0) {
+    showToast('Please select at least one evidence item to link', 'error');
+    return;
+  }
+
+  fetch('/api/cases/{{ case.case_id }}/evidence', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ evidence_ids: evidenceIds })
+  })
+  .then(res => res.json())
+  .then(res => {
+    if (res.status === 'success') {
+      showToast('Evidence linked successfully', 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(res.message || 'Error linking evidence', 'error');
+    }
+  })
+  .catch(() => showToast('Network error', 'error'));
+}
+
+function unlinkEvidence(caseId, evidenceId) {
+  if (confirm('Unlink this evidence from case? (The evidence record itself will remain intact).')) {
+    fetch(`/api/cases/${caseId}/evidence`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ evidence_id: evidenceId })
+    })
+    .then(res => res.json())
+    .then(res => {
+      if (res.status === 'success') {
+        showToast('Evidence unlinked', 'success');
+        setTimeout(() => location.reload(), 800);
+      } else {
+        showToast(res.message || 'Error', 'error');
+      }
+    })
+    .catch(() => showToast('Network error', 'error'));
+  }
+}
+
+function submitAddTask(e) {
+  e.preventDefault();
+  const form = e.target;
+  const userCheckboxes = form.querySelectorAll('input[name="user_ids"]:checked');
+  const userIds = Array.from(userCheckboxes).map(cb => parseInt(cb.value));
+
+  const data = {
+    case_id: parseInt(form.case_id.value),
+    task_title: form.task_title.value,
+    description: form.description.value,
+    due_date: form.due_date.value || null,
+    status: form.status.value,
+    user_ids: userIds
+  };
+
+  fetch('/api/tasks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(res => {
+    if (res.status === 'success') {
+      showToast('Task created successfully', 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(res.message || 'Error creating task', 'error');
+    }
+  })
+  .catch(() => showToast('Network error', 'error'));
+}
+</script>
+{% endblock %}

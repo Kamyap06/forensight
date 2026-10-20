@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}ForenSight — Digital Evidence & Investigation Management{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+</head>
+<body>
+
+  <!-- Left Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="brand-section">
+      <a href="/" class="brand-logo">
+        <div class="brand-icon">🛡️</div>
+        <div>
+          <div class="brand-title">ForenSight</div>
+          <div class="brand-tagline">Every digital trace tells a story.</div>
+        </div>
+      </a>
+    </div>
+
+    <ul class="nav-menu">
+      <li class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+        <a href="/"><span class="nav-icon">📊</span> <span>Dashboard</span></a>
+      </li>
+      <li class="nav-item {% if active_page == 'cases' %}active{% endif %}">
+        <a href="/cases"><span class="nav-icon">📁</span> <span>Cases</span></a>
+      </li>
+      <li class="nav-item {% if active_page == 'evidence' %}active{% endif %}">
+        <a href="/evidence"><span class="nav-icon">🔬</span> <span>Evidence Lab</span></a>
+      </li>
+      <li class="nav-item {% if active_page == 'tasks' %}active{% endif %}">
+        <a href="/tasks"><span class="nav-icon">📋</span> <span>Investigation Tasks</span></a>
+      </li>
+      <li class="nav-item {% if active_page == 'findings' %}active{% endif %}">
+        <a href="/findings"><span class="nav-icon">⚠️</span> <span>Analysis Findings</span></a>
+      </li>
+      <li class="nav-item {% if active_page == 'custody' %}active{% endif %}">
+        <a href="/custody"><span class="nav-icon">⛓️</span> <span>Chain of Custody</span></a>
+      </li>
+      <li class="nav-item {% if active_page == 'notes' %}active{% endif %}">
+        <a href="/notes"><span class="nav-icon">📝</span> <span>Evidence Notes</span></a>
+      </li>
+      <li class="nav-item {% if active_page == 'audit' %}active{% endif %}">
+        <a href="/audit"><span class="nav-icon">📜</span> <span>Audit Logs</span></a>
+      </li>
+      <li class="nav-item {% if active_page == 'reports' %}active{% endif %}">
+        <a href="/reports"><span class="nav-icon">📑</span> <span>Reports</span></a>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <div class="system-status">
+        <div class="status-dot"></div>
+        <span>MySQL 8.0 Live</span>
+      </div>
+      <div>Database: <strong>forensight</strong></div>
+    </div>
+  </aside>
+
+  <!-- Main Wrapper -->
+  <div class="main-wrapper">
+    <!-- Topbar Header -->
+    <header class="topbar">
+      <div class="page-headline">
+        <h1>{% block page_title %}Investigation Dashboard{% endblock %}</h1>
+        <p>{% block page_subtitle %}Cybersecurity Incident Management & Relational Database Interface{% endblock %}</p>
+      </div>
+      <div class="topbar-actions">
+        <div class="badge-db">
+          <span>⚡ Connected:</span>
+          <span>localhost:3306</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="content-container">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
